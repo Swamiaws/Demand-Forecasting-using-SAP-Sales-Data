@@ -1,6 +1,6 @@
 pandas
 numpy
-sklearn
+scikit-learn
 scipy
 langchain-groq
 langchain-experimental
