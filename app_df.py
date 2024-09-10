@@ -9,7 +9,7 @@ from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe
 from langchain.memory import ConversationSummaryBufferMemory
 
 # Load environment variables
-load_dotenv()
+# load_dotenv()
 
 # Function to initialize session state
 def init_state():
