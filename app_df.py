@@ -1,5 +1,5 @@
 import os
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,7 +8,7 @@ from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe
 from langchain.memory import ConversationSummaryBufferMemory
 
 # Load environment variables
-load_dotenv()
+# load_dotenv()
 
 # Function to initialize session state
 def init_state():
@@ -26,7 +26,7 @@ def select_llm_model(model_name, temperature):
         "Mixtral-8x7b-32768": "mixtral-8x7b-32768"
     }
     selected_model = model_mapping.get(model_name)
-    groq_api = os.environ.get('GROQ_API_KEY')
+    groq_api = st.secrets('GROQ_API_KEY')
     if not groq_api:
         raise ValueError("GROQ_API_KEY environment variable is not set.")
     llm = ChatGroq(temperature=temperature, model=selected_model, api_key=groq_api)
