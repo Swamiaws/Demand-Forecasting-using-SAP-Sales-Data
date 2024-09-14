@@ -1,5 +1,5 @@
 import os
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,7 +8,7 @@ from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe
 from langchain.memory import ConversationSummaryBufferMemory
 
 # Load environment variables
-load_dotenv()
+# load_dotenv()
 
 # Function to initialize session state
 def init_state():
@@ -26,20 +26,16 @@ def select_llm_model(model_name, temperature):
         "Mixtral-8x7b-32768": "mixtral-8x7b-32768"
     }
     selected_model = model_mapping.get(model_name)
-    groq_api = st.secrets["grok"]["GROQ_API_KEY"]
+    groq_api = st.secrets['GROQ_API_KEY']
     if not groq_api:
-        raise ValueError("GROQ_API_KEY secret is not set.")
+        raise ValueError("GROQ_API_KEY environment variable is not set.")
     llm = ChatGroq(temperature=temperature, model=selected_model, api_key=groq_api)
     return llm
 
 # Function to convert Excel file to DataFrame
 def convert_excel_to_df(file_path):
-    try:
-        df = pd.read_excel(file_path)
-        return df
-    except Exception as e:
-        st.error(f"Error reading the file: {str(e)}")
-        return None
+    df = pd.read_excel(file_path)
+    return df
 
 prompt = '''You are a demand forecasting expert. You have access to an Excel file named "SAPReport.xlsx," which contains historical sales data, product information, and demand trends. For each user query, you must analyze the relevant data and provide accurate demand forecasts.
 Key points for your analysis:
@@ -49,42 +45,36 @@ Key points for your analysis:
 '''
 
 # Function to create a pandas dataframe agent
-def create_pandas_agent(llm, df):
-    try:
-        agent_executor = create_pandas_dataframe_agent(
-            llm,
-            df,
-            agent_type="tool-calling",
-            verbose=True,
-            prefix=prompt, 
-            include_df_in_prompt=True
-        )
-        return agent_executor
-    except Exception as e:
-        st.error(f"Error creating pandas agent: {str(e)}")
-        return None
+def create_pandas_agent(llm, df, memory):
+    agent_executor = create_pandas_dataframe_agent(
+        llm,
+        df,
+        memory=memory,
+        agent_type="tool-calling",
+        verbose=True,
+        prefix=prompt,
+        include_df_in_prompt=True,
+        allow_dangerous_code=True
+    )
+    return agent_executor
 
 # Function to query the agent and extract output
 def query_data(agent, query):
-    try:
-        if agent is None:
-            raise ValueError("Agent is not initialized properly.")
-        
-        response = agent.invoke(query)
-        
-        output_value = response.get('output', 'No output found')
-        graph_code = response.get('graph_code', '').strip()
-        token_usage = response.get('response_metadata', {}).get("token_usage", {}).get("total_tokens", 0)
-        
-        st.session_state.token_count += token_usage
-        
-        return output_value, graph_code
-    except AttributeError as e:
-        st.error(f"AttributeError: {str(e)}")
-    except ValueError as e:
-        st.error(f"ValueError: {str(e)}")
-    except Exception as e:
-        st.error(f"Error: {str(e)}")
+    response = agent.invoke(query)
+    
+    # Safely access the output value
+    output_value = response.get('output', 'No output found')
+    
+    # Safely access the graph code
+    graph_code = response.get('graph_code', '').strip()
+    
+    # Check if token usage exists and extract it
+    token_usage = response.get('response_metadata', {}).get("token_usage", {}).get("total_tokens", 0)
+    
+    # Update the session state with the token count
+    st.session_state.token_count += token_usage
+    
+    return output_value, graph_code
 
 # Set up the Streamlit page
 st.set_page_config(page_title="Demand Forecast Chatbot", page_icon="📊", layout="wide")
@@ -95,12 +85,13 @@ if 'messages' not in st.session_state:
     init_state()
 
 # Directly specify the file path
-file_path = "SAPReport.xlsx" 
+file_path = "SAPReport.xlsx"
 
 if file_path:
     with st.spinner("Loading data..."):
-        df = convert_excel_to_df(file_path)
-        if df is not None:
+        try:
+            # Convert file to DataFrame
+            df = convert_excel_to_df(file_path)
             data_file_name = os.path.basename(file_path)
 
             # Sidebar for model selection
@@ -112,20 +103,28 @@ if file_path:
                     index=1  # Default to Llama3-70b-8192
                 )
                 
+                # Add temperature slider
                 temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.0, step=0.1)
 
+                # Display token usage and file name
                 st.markdown(f"**Data File:** {data_file_name}")
 
-            st.sidebar.markdown("""
-                **Note:**
-                - This chatbot is fed with SAP's data from 2015 and 2016.
-                - It may make mistakes in its forecasts.
-            """)
+                # Add custom message
+                st.sidebar.markdown("""
+                    **Note:**
+                    - This chatbot is fed with SAP's data from 2015 and 2016.
+                    - It may make mistakes in its forecasts.
+                """)
 
             if selected_model:
+                # Initialize LLM
                 llm = select_llm_model(selected_model, temperature)
+                
+                # Initialize memory with the LLM instance
                 memory = ConversationSummaryBufferMemory(llm=llm, memory_key="chat_history", return_messages=True)
-                agent = create_pandas_agent(llm, df)
+                
+                # Create the pandas agent with memory
+                agent = create_pandas_agent(llm, df, memory)
 
                 # Display existing messages
                 for message in st.session_state.messages:
@@ -147,6 +146,7 @@ if file_path:
                             placeholder.markdown(output_value, unsafe_allow_html=True)
                             st.session_state.messages.append({"role": "assistant", "content": output_value})
 
+                            # Execute the graph code if it exists
                             if graph_code:
                                 exec(graph_code)
                                 st.pyplot(plt.gcf())
@@ -155,6 +155,9 @@ if file_path:
                             st.error(f"KeyError: {str(e)}")
                         except Exception as e:
                             st.error(f"Error: {str(e)}")
+
+        except Exception as e:
+            st.error(f"Error reading the file: {str(e)}")
 
 # Display chat history if any
 if st.session_state.history:
