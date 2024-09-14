@@ -1,6 +1,5 @@
-
 import os
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -9,7 +8,7 @@ from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe
 from langchain.memory import ConversationSummaryBufferMemory
 
 # Load environment variables
-# load_dotenv()
+load_dotenv()
 
 # Function to initialize session state
 def init_state():
@@ -38,6 +37,13 @@ def convert_excel_to_df(file_path):
     df = pd.read_excel(file_path)
     return df
 
+prompt = '''You are a demand forecasting expert. You have access to an Excel file named "SAPReport.xlsx," which contains historical sales data, product information, and demand trends. For each user query, you must analyze the relevant data and provide accurate demand forecasts.
+Key points for your analysis:
+1. Use the historical data from "SAPReport.xlsx" to identify patterns and trends.
+2. Generate demand forecasts based on the provided input query.
+3. Include any relevant assumptions and insights based on the data.
+'''
+
 # Function to create a pandas dataframe agent
 def create_pandas_agent(llm, df, memory):
     agent_executor = create_pandas_dataframe_agent(
@@ -46,19 +52,28 @@ def create_pandas_agent(llm, df, memory):
         memory=memory,
         agent_type="tool-calling",
         verbose=True,
-        prefix='You are interacting with a dataset named "SAPReport.xlsx" for Demand Forecasting. Provide detailed answerr based on the data. If necessary, create concise code examples for visualization or analysis.',
-        suffix='Only generate Python code if explicitly requested or if a visualization is required. Use `import streamlit as st` for Streamlit-based visualizations, and end with `st.pyplot(plt.gcf())` to display the plot.',
-        allow_dangerous_code=True,
-        include_df_in_prompt=True
+        prefix=prompt,
+        include_df_in_prompt=True,
+        allow_dangerous_code=True
     )
     return agent_executor
 
 # Function to query the agent and extract output
 def query_data(agent, query):
     response = agent.invoke(query)
+    
+    # Safely access the output value
     output_value = response.get('output', 'No output found')
+    
+    # Safely access the graph code
     graph_code = response.get('graph_code', '').strip()
-    st.session_state.token_count += response.get('token_usage', 0)
+    
+    # Check if token usage exists and extract it
+    token_usage = response.get('response_metadata', {}).get("token_usage", {}).get("total_tokens", 0)
+    
+    # Update the session state with the token count
+    st.session_state.token_count += token_usage
+    
     return output_value, graph_code
 
 # Set up the Streamlit page
@@ -70,7 +85,7 @@ if 'messages' not in st.session_state:
     init_state()
 
 # Directly specify the file path
-file_path = "SAPReport.xlsx" 
+file_path = "SAPReport.xlsx"
 
 if file_path:
     with st.spinner("Loading data..."):
@@ -93,7 +108,13 @@ if file_path:
 
                 # Display token usage and file name
                 st.markdown(f"**Data File:** {data_file_name}")
-                st.markdown(f"**Tokens Consumed:** {st.session_state.token_count}")
+
+                # Add custom message
+                st.sidebar.markdown("""
+                    **Note:**
+                    - This chatbot is fed with SAP's data from 2015 and 2016.
+                    - It may make mistakes in its forecasts.
+                """)
 
             if selected_model:
                 # Initialize LLM
